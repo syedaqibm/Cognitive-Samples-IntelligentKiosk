@@ -1,0 +1,21 @@
+{
+  "name": "neighborhood-app",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Neighborhood home-grown marketplace: list and pick up plants, fruits, and vegetables with QR + PIN pickup verification.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build:shared": "npm run build --workspace @neighborhood/shared",
+    "db:setup": "npm run prisma:generate --workspace @neighborhood/api && npm run prisma:migrate --workspace @neighborhood/api && npm run seed --workspace @neighborhood/api",
+    "dev:api": "npm run dev --workspace @neighborhood/api",
+    "dev:mobile": "npm run start --workspace @neighborhood/mobile",
+    "dev": "concurrently -n api,mobile -c blue,magenta \"npm:dev:api\" \"npm:dev:mobile\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "typescript": "^5.5.4"
+  }
+}

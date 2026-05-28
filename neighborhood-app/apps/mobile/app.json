@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "Neighborhood",
+    "slug": "neighborhood-app",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "neighborhood",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#2f7d32"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.neighborhood.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Used to scan a seller's QR code at pickup and to take photos of listings.",
+        "NSPhotoLibraryUsageDescription": "Used to attach a photo to your listing."
+      }
+    },
+    "android": {
+      "package": "com.neighborhood.app",
+      "permissions": ["CAMERA"]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Used to scan a seller's QR code at pickup and to take photos of listings."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Used to attach a photo to your listing.",
+          "cameraPermission": "Used to take photos for your listings."
+        }
+      ]
+    ]
+  }
+}

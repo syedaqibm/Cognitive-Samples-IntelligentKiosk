@@ -1,0 +1,23 @@
+node_modules
+.next
+.expo
+dist
+build
+*.log
+*.tsbuildinfo
+.env
+.env.local
+
+# Prisma SQLite database files
+apps/api/prisma/dev.db
+apps/api/prisma/dev.db-journal
+apps/api/dev.db
+apps/api/dev.db-journal
+
+# Uploaded photos (keep folder via .gitkeep)
+apps/api/uploads/*
+!apps/api/uploads/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db

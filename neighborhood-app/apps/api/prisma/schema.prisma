@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  passwordHash   String
+  displayName    String
+  houseLabel     String?
+  createdAt      DateTime @default(now())
+
+  listings       Listing[] @relation("UserListings")
+  ordersAsBuyer  Order[]   @relation("OrdersAsBuyer")
+  ordersAsSeller Order[]   @relation("OrdersAsSeller")
+}
+
+model Listing {
+  id                String   @id @default(cuid())
+  sellerId          String
+  seller            User     @relation("UserListings", fields: [sellerId], references: [id])
+  title             String
+  description       String?
+  category          String
+  unit              String
+  pricePerUnit      Float
+  quantityAvailable Float
+  photoFilename     String?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  orders            Order[]
+
+  @@index([sellerId, isActive])
+}
+
+model Order {
+  id                 String    @id @default(cuid())
+  listingId          String
+  listing            Listing   @relation(fields: [listingId], references: [id])
+  buyerId            String
+  buyer              User      @relation("OrdersAsBuyer", fields: [buyerId], references: [id])
+  sellerId           String
+  seller             User      @relation("OrdersAsSeller", fields: [sellerId], references: [id])
+  quantity           Float
+  unitPriceSnapshot  Float
+  status             String    @default("PENDING")
+  orderToken         String    @unique
+  pickupPin          String
+  createdAt          DateTime  @default(now())
+  completedAt        DateTime?
+
+  verifications      PickupVerification[]
+
+  @@index([buyerId, status])
+  @@index([sellerId, status])
+}
+
+model PickupVerification {
+  id            String   @id @default(cuid())
+  orderId       String
+  order         Order    @relation(fields: [orderId], references: [id])
+  attemptedAt   DateTime @default(now())
+  success       Boolean
+  failureReason String?
+
+  @@index([orderId])
+}
