@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ZodError, type ZodSchema } from "zod";
+import type { ZodSchema } from "zod";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -40,14 +40,11 @@ export async function parseJson<T>(req: Request, schema: ZodSchema<T>): Promise<
   } catch {
     throw new HttpError(400, "Invalid JSON body");
   }
-  try {
-    return schema.parse(body);
-  } catch (err) {
-    if (err instanceof ZodError) {
-      throw new HttpError(400, "Validation failed", err.flatten());
-    }
-    throw err;
+  const result = schema.safeParse(body);
+  if (!result.success) {
+    throw new HttpError(400, "Validation failed", result.error.flatten());
   }
+  return result.data;
 }
 
 export class HttpError extends Error {
