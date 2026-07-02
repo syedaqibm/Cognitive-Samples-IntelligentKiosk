@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXUS // Holographic Interface</title>
+<meta name="description" content="An immersive sci-fi digital universe — holographic interfaces, cinematic particle simulations and experimental UI.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@300;400;500;600&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   NEXUS — core design tokens
+============================================================ */
+:root{
+  --bg:#030308;
+  --bg-2:#07071a;
+  --cyan:#00f0ff;
+  --magenta:#ff00e5;
+  --violet:#7b2fff;
+  --lime:#aaff00;
+  --amber:#ffb300;
+  --ink:#e8f6ff;
+  --ink-dim:rgba(200,230,255,.55);
+  --glass:rgba(10,20,45,.38);
+  --glass-edge:rgba(0,240,255,.22);
+  --font-display:'Orbitron','Segoe UI',sans-serif;
+  --font-body:'Rajdhani','Segoe UI',sans-serif;
+  --font-mono:'Share Tech Mono','Consolas',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+html,body{height:100%}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--font-body);
+  overflow-x:hidden;
+  cursor:none;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:var(--cyan);color:#000}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:#05050f}
+::-webkit-scrollbar-thumb{background:linear-gradient(var(--cyan),var(--violet));border-radius:3px}
+
+/* ============================================================
+   Fixed cosmic backdrop — WebGL canvas + nebula + overlays
+============================================================ */
+#gl{
+  position:fixed;inset:0;width:100%;height:100%;
+  z-index:0;display:block;
+}
+.nebula{
+  position:fixed;inset:-20%;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse 42% 34% at 18% 22%, rgba(123,47,255,.20), transparent 60%),
+    radial-gradient(ellipse 38% 30% at 82% 68%, rgba(0,240,255,.13), transparent 60%),
+    radial-gradient(ellipse 30% 26% at 60% 12%, rgba(255,0,229,.10), transparent 60%),
+    radial-gradient(ellipse 50% 42% at 45% 88%, rgba(0,60,255,.14), transparent 60%);
+  animation:nebulaDrift 40s ease-in-out infinite alternate;
+  filter:blur(10px);
+}
+@keyframes nebulaDrift{
+  0%{transform:translate3d(-2%,-1%,0) scale(1) rotate(-1deg)}
+  100%{transform:translate3d(2%,2%,0) scale(1.08) rotate(1.5deg)}
+}
+.scanlines{
+  position:fixed;inset:0;z-index:60;pointer-events:none;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.16) 0 1px,transparent 1px 3px);
+  mix-blend-mode:overlay;opacity:.5;
+}
+.vignette{
+  position:fixed;inset:0;z-index:59;pointer-events:none;
+  background:radial-gradient(ellipse 80% 70% at 50% 45%,transparent 55%,rgba(0,0,5,.72) 100%);
+}
+.grain{
+  position:fixed;inset:-50%;z-index:61;pointer-events:none;opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation:grainShift .6s steps(4) infinite;
+}
+@keyframes grainShift{
+  0%{transform:translate(0,0)}25%{transform:translate(-2%,3%)}
+  50%{transform:translate(3%,-2%)}75%{transform:translate(-3%,-3%)}100%{transform:translate(2%,2%)}
+}
+/* horizontal scan sweep */
+.sweep{
+  position:fixed;left:0;right:0;height:140px;z-index:58;pointer-events:none;
+  background:linear-gradient(180deg,transparent,rgba(0,240,255,.05) 45%,rgba(0,240,255,.12) 50%,rgba(0,240,255,.05) 55%,transparent);
+  animation:sweepMove 9s linear infinite;opacity:.8;
+}
+@keyframes sweepMove{0%{top:-140px}100%{top:110vh}}
+
+/* ============================================================
+   Custom cursor
+============================================================ */
+.cursor-dot,.cursor-ring{position:fixed;top:0;left:0;z-index:100;pointer-events:none;border-radius:50%;transform:translate(-50%,-50%)}
+.cursor-dot{width:6px;height:6px;background:var(--cyan);box-shadow:0 0 12px var(--cyan),0 0 30px rgba(0,240,255,.6)}
+.cursor-ring{
+  width:34px;height:34px;border:1px solid rgba(0,240,255,.5);
+  transition:width .25s,height .25s,border-color .25s,background .25s;
+}
+.cursor-ring.on-link{width:64px;height:64px;border-color:var(--magenta);background:rgba(255,0,229,.06)}
+@media (hover:none){.cursor-dot,.cursor-ring{display:none}body{cursor:auto}}
+
+/* ============================================================
+   Boot intro overlay
+============================================================ */
+#boot{
+  position:fixed;inset:0;z-index:90;background:#020207;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;
+  transition:opacity 1.1s cubic-bezier(.7,0,.3,1),transform 1.1s cubic-bezier(.7,0,.3,1),visibility 1.1s;
+}
+#boot.done{opacity:0;transform:scale(1.35);visibility:hidden}
+.boot-glyph{
+  width:86px;height:86px;position:relative;
+}
+.boot-glyph::before,.boot-glyph::after{
+  content:"";position:absolute;inset:0;border-radius:50%;
+  border:2px solid transparent;
+}
+.boot-glyph::before{border-top-color:var(--cyan);border-right-color:var(--cyan);animation:spin 1.1s linear infinite}
+.boot-glyph::after{inset:14px;border-bottom-color:var(--magenta);border-left-color:var(--magenta);animation:spin 1.6s linear infinite reverse}
+@keyframes spin{to{transform:rotate(360deg)}}
+.boot-text{font-family:var(--font-mono);font-size:13px;letter-spacing:.35em;color:var(--cyan);text-transform:uppercase;min-height:1.4em}
+.boot-bar{width:min(320px,70vw);height:2px;background:rgba(0,240,255,.14);overflow:hidden}
+.boot-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--magenta));box-shadow:0 0 14px var(--cyan);transition:width .18s}
+.boot-log{font-family:var(--font-mono);font-size:10px;color:rgba(120,200,230,.45);letter-spacing:.14em;height:14px}
+
+/* ============================================================
+   HUD chrome — nav + corner brackets
+============================================================ */
+.hud-corner{position:fixed;width:52px;height:52px;z-index:55;pointer-events:none;opacity:.7}
+.hud-corner svg{width:100%;height:100%;stroke:var(--cyan);fill:none;stroke-width:1.5;filter:drop-shadow(0 0 5px rgba(0,240,255,.8))}
+.hud-corner.tl{top:14px;left:14px}
+.hud-corner.tr{top:14px;right:14px;transform:scaleX(-1)}
+.hud-corner.bl{bottom:14px;left:14px;transform:scaleY(-1)}
+.hud-corner.br{bottom:14px;right:14px;transform:scale(-1)}
+
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:70;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:22px clamp(24px,5vw,72px);
+  background:linear-gradient(180deg,rgba(3,3,12,.75),transparent);
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+}
+.logo{display:flex;align-items:center;gap:12px;text-decoration:none}
+.logo-mark{
+  width:34px;height:34px;position:relative;flex:none;
+  border:1px solid var(--cyan);transform:rotate(45deg);
+  box-shadow:0 0 18px rgba(0,240,255,.45),inset 0 0 12px rgba(0,240,255,.25);
+  animation:logoPulse 3s ease-in-out infinite;
+}
+.logo-mark::after{content:"";position:absolute;inset:7px;background:linear-gradient(135deg,var(--cyan),var(--magenta));opacity:.85}
+@keyframes logoPulse{0%,100%{box-shadow:0 0 14px rgba(0,240,255,.4),inset 0 0 10px rgba(0,240,255,.2)}50%{box-shadow:0 0 30px rgba(0,240,255,.8),inset 0 0 18px rgba(0,240,255,.5)}}
+.logo-name{font-family:var(--font-display);font-weight:800;font-size:18px;letter-spacing:.42em;color:var(--ink)}
+.logo-name em{font-style:normal;background:linear-gradient(90deg,var(--cyan),var(--magenta));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.nav-links{display:flex;gap:clamp(14px,3vw,42px);list-style:none}
+.nav-links a{
+  position:relative;font-family:var(--font-mono);font-size:12px;letter-spacing:.3em;
+  color:var(--ink-dim);text-decoration:none;text-transform:uppercase;padding:6px 2px;
+  transition:color .3s,text-shadow .3s;
+}
+.nav-links a::before{content:attr(data-idx);color:var(--cyan);margin-right:7px;font-size:9px;opacity:.7}
+.nav-links a::after{content:"";position:absolute;left:0;bottom:0;height:1px;width:0;background:linear-gradient(90deg,var(--cyan),var(--magenta));transition:width .35s;box-shadow:0 0 8px var(--cyan)}
+.nav-links a:hover{color:var(--ink);text-shadow:0 0 12px rgba(0,240,255,.8)}
+.nav-links a:hover::after{width:100%}
+@media(max-width:760px){.nav-links{display:none}}
+
+/* ============================================================
+   Shared section layout + camera-transition reveal
+============================================================ */
+main{position:relative;z-index:10}
+section{
+  position:relative;min-height:100vh;
+  display:flex;flex-direction:column;justify-content:center;
+  padding:16vh clamp(24px,7vw,110px);
+  perspective:1200px;
+}
+.reveal{
+  opacity:0;transform:translateY(80px) scale(.94);filter:blur(14px);
+  transition:opacity 1.1s cubic-bezier(.16,1,.3,1),transform 1.1s cubic-bezier(.16,1,.3,1),filter 1.1s cubic-bezier(.16,1,.3,1);
+  transition-delay:var(--d,0s);
+  will-change:opacity,transform,filter;
+}
+.reveal.in{opacity:1;transform:translateY(0) scale(1);filter:blur(0)}
+.sec-tag{
+  display:inline-flex;align-items:center;gap:10px;
+  font-family:var(--font-mono);font-size:11px;letter-spacing:.4em;text-transform:uppercase;
+  color:var(--cyan);margin-bottom:22px;
+}
+.sec-tag::before{content:"";width:34px;height:1px;background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+.sec-tag .blink{animation:blink 1.2s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+h2.sec-title{
+  font-family:var(--font-display);font-weight:800;
+  font-size:clamp(30px,5.2vw,62px);line-height:1.06;letter-spacing:.04em;
+  text-transform:uppercase;margin-bottom:18px;
+}
+h2.sec-title .grad{background:linear-gradient(92deg,var(--cyan) 10%,var(--violet) 55%,var(--magenta) 95%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 22px rgba(0,240,255,.35))}
+.sec-sub{max-width:560px;font-size:clamp(15px,1.6vw,19px);font-weight:400;color:var(--ink-dim);letter-spacing:.04em;line-height:1.7}
+
+/* ============================================================
+   HERO
+============================================================ */
+#hero{align-items:center;text-align:center;min-height:100vh;padding-top:20vh}
+.hero-eyebrow{
+  font-family:var(--font-mono);font-size:12px;letter-spacing:.55em;text-transform:uppercase;
+  color:var(--cyan);margin-bottom:28px;
+  display:inline-flex;align-items:center;gap:14px;
+  border:1px solid rgba(0,240,255,.25);padding:10px 22px;border-radius:100px;
+  background:rgba(0,240,255,.04);box-shadow:0 0 24px rgba(0,240,255,.12) inset,0 0 18px rgba(0,240,255,.1);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+}
+.hero-eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--lime);box-shadow:0 0 10px var(--lime);animation:blink 1.8s steps(2) infinite}
+h1.hero-title{
+  font-family:var(--font-display);font-weight:900;
+  font-size:clamp(46px,10.5vw,138px);line-height:.98;letter-spacing:.05em;text-transform:uppercase;
+  margin-bottom:8px;position:relative;
+}
+h1 .line-a{display:block;color:var(--ink);text-shadow:0 0 40px rgba(160,220,255,.35)}
+h1 .line-b{
+  display:block;
+  background:linear-gradient(94deg,var(--cyan) 5%,var(--violet) 48%,var(--magenta) 92%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 0 34px rgba(123,47,255,.5));
+  animation:hueSlide 7s ease-in-out infinite alternate;
+  background-size:200% 100%;
+}
+@keyframes hueSlide{0%{background-position:0% 0}100%{background-position:100% 0}}
+/* glitch flickers */
+.glitch{position:relative}
+.glitch::before,.glitch::after{
+  content:attr(data-text);position:absolute;inset:0;overflow:hidden;
+  opacity:0;pointer-events:none;
+}
+.glitch::before{color:var(--cyan);animation:glitchA 5s infinite steps(1)}
+.glitch::after{color:var(--magenta);animation:glitchB 5s infinite steps(1)}
+@keyframes glitchA{
+  0%,93%,100%{opacity:0;transform:none;clip-path:inset(0)}
+  94%{opacity:.75;transform:translate(-5px,2px);clip-path:inset(12% 0 58% 0)}
+  96%{opacity:.75;transform:translate(4px,-2px);clip-path:inset(60% 0 8% 0)}
+}
+@keyframes glitchB{
+  0%,94%,100%{opacity:0;transform:none;clip-path:inset(0)}
+  95%{opacity:.75;transform:translate(5px,1px);clip-path:inset(40% 0 30% 0)}
+  97%{opacity:.75;transform:translate(-4px,-1px);clip-path:inset(4% 0 78% 0)}
+}
+.hero-desc{max-width:620px;margin:26px auto 44px;color:var(--ink-dim);font-size:clamp(15px,1.8vw,19px);letter-spacing:.06em;line-height:1.75;font-weight:400}
+.hero-cta{display:flex;gap:22px;justify-content:center;flex-wrap:wrap}
+
+/* neon buttons */
+.btn{
+  position:relative;display:inline-flex;align-items:center;gap:12px;
+  font-family:var(--font-mono);font-size:13px;letter-spacing:.3em;text-transform:uppercase;
+  color:var(--ink);text-decoration:none;padding:16px 34px;
+  border:1px solid var(--glass-edge);background:var(--glass);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px);
+  transition:transform .3s,box-shadow .3s,border-color .3s,background .3s;
+  overflow:hidden;will-change:transform;
+}
+.btn::before{
+  content:"";position:absolute;top:0;left:-80%;width:60%;height:100%;
+  background:linear-gradient(100deg,transparent,rgba(0,240,255,.35),transparent);
+  transform:skewX(-20deg);transition:left .55s;
+}
+.btn:hover::before{left:120%}
+.btn:hover{border-color:var(--cyan);box-shadow:0 0 26px rgba(0,240,255,.35),inset 0 0 22px rgba(0,240,255,.12)}
+.btn.primary{border-color:rgba(0,240,255,.6);background:linear-gradient(120deg,rgba(0,240,255,.14),rgba(123,47,255,.16));box-shadow:0 0 22px rgba(0,240,255,.25)}
+.btn.magenta:hover{border-color:var(--magenta);box-shadow:0 0 26px rgba(255,0,229,.35),inset 0 0 22px rgba(255,0,229,.12)}
+.btn .arrow{transition:transform .3s}
+.btn:hover .arrow{transform:translateX(6px)}
+
+/* floating hero hologram chips */
+.holo-chips{position:absolute;inset:0;pointer-events:none;z-index:-1}
+.chip{
+  position:absolute;padding:12px 18px;
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.24em;color:var(--cyan);
+  background:rgba(6,14,34,.5);border:1px solid rgba(0,240,255,.3);border-radius:8px;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  box-shadow:0 8px 32px rgba(0,0,10,.5),0 0 18px rgba(0,240,255,.12);
+  animation:chipFloat var(--t,7s) ease-in-out infinite alternate;
+  white-space:nowrap;
+}
+.chip b{display:block;font-size:17px;color:var(--ink);letter-spacing:.1em;margin-top:3px;font-family:var(--font-display)}
+.chip.c1{top:24%;left:6%;--t:6.5s}
+.chip.c2{top:20%;right:7%;--t:8s;animation-delay:-2s;color:var(--magenta);border-color:rgba(255,0,229,.3)}
+.chip.c3{bottom:23%;left:11%;--t:7.4s;animation-delay:-4s;color:var(--violet);border-color:rgba(123,47,255,.35)}
+.chip.c4{bottom:27%;right:9%;--t:9s;animation-delay:-1s;color:var(--lime);border-color:rgba(170,255,0,.28)}
+@keyframes chipFloat{
+  0%{transform:translate3d(0,-14px,0) rotate(-1.2deg)}
+  100%{transform:translate3d(0,16px,0) rotate(1.2deg)}
+}
+@media(max-width:900px){.chip{display:none}}
+
+.scroll-hint{
+  position:absolute;bottom:34px;left:50%;transform:translateX(-50%);
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.5em;color:var(--ink-dim);text-transform:uppercase;
+}
+.scroll-hint .beam{width:1px;height:52px;background:linear-gradient(180deg,var(--cyan),transparent);position:relative;overflow:hidden}
+.scroll-hint .beam::after{content:"";position:absolute;top:-16px;left:0;width:1px;height:16px;background:#fff;box-shadow:0 0 8px var(--cyan);animation:beamDrop 1.8s ease-in infinite}
+@keyframes beamDrop{to{top:60px}}
+
+/* data ticker */
+.ticker{
+  position:relative;z-index:12;border-top:1px solid rgba(0,240,255,.14);border-bottom:1px solid rgba(0,240,255,.14);
+  background:rgba(4,8,22,.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  overflow:hidden;padding:13px 0;
+}
+.ticker-track{display:flex;gap:64px;white-space:nowrap;animation:tick 30s linear infinite;width:max-content}
+.ticker span{font-family:var(--font-mono);font-size:11px;letter-spacing:.32em;color:var(--ink-dim);text-transform:uppercase}
+.ticker span i{color:var(--cyan);font-style:normal;margin-right:10px}
+@keyframes tick{to{transform:translateX(-50%)}}
+
+/* ============================================================
+   MODULE GRID — glassmorphism tilt cards
+============================================================ */
+.grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  gap:clamp(18px,2.6vw,34px);margin-top:56px;
+}
+.card{
+  --mx:50%;--my:50%;
+  position:relative;padding:34px 30px 30px;border-radius:18px;
+  background:var(--glass);
+  border:1px solid rgba(140,200,255,.14);
+  backdrop-filter:blur(18px) saturate(1.3);-webkit-backdrop-filter:blur(18px) saturate(1.3);
+  box-shadow:0 24px 60px rgba(0,0,8,.55),inset 0 1px 0 rgba(255,255,255,.08);
+  transform-style:preserve-3d;
+  transition:border-color .4s,box-shadow .4s;
+  will-change:transform;
+  overflow:hidden;
+}
+.card::before{ /* cursor-tracked holo glow */
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:radial-gradient(320px circle at var(--mx) var(--my),rgba(0,240,255,.14),transparent 65%);
+  opacity:0;transition:opacity .4s;
+}
+.card:hover::before{opacity:1}
+.card::after{ /* top edge light */
+  content:"";position:absolute;top:0;left:8%;right:8%;height:1px;
+  background:linear-gradient(90deg,transparent,var(--ac,var(--cyan)),transparent);
+  opacity:.8;filter:blur(.4px);
+}
+.card:hover{border-color:rgba(0,240,255,.4);box-shadow:0 30px 80px rgba(0,0,10,.65),0 0 40px rgba(0,240,255,.12),inset 0 1px 0 rgba(255,255,255,.1)}
+.card .inner{transform:translateZ(46px)}
+.card-num{position:absolute;top:20px;right:24px;font-family:var(--font-mono);font-size:11px;color:var(--ink-dim);letter-spacing:.2em}
+.card-icon{
+  width:56px;height:56px;margin-bottom:22px;border-radius:12px;
+  display:grid;place-items:center;
+  background:linear-gradient(135deg,rgba(0,240,255,.12),rgba(123,47,255,.14));
+  border:1px solid var(--glass-edge);
+  box-shadow:0 0 22px rgba(0,240,255,.15),inset 0 0 14px rgba(0,240,255,.1);
+}
+.card-icon svg{width:26px;height:26px;stroke:var(--ac,var(--cyan));fill:none;stroke-width:1.6;filter:drop-shadow(0 0 6px var(--ac,var(--cyan)))}
+.card h3{font-family:var(--font-display);font-size:18px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:12px;color:var(--ink)}
+.card p{font-size:15px;line-height:1.7;color:var(--ink-dim);letter-spacing:.03em}
+.card .card-link{
+  display:inline-flex;align-items:center;gap:8px;margin-top:22px;
+  font-family:var(--font-mono);font-size:11px;letter-spacing:.28em;text-transform:uppercase;
+  color:var(--ac,var(--cyan));text-decoration:none;
+}
+.card .card-link::after{content:"→";transition:transform .3s}
+.card:hover .card-link::after{transform:translateX(5px)}
+.card.m{--ac:var(--magenta)}
+.card.v{--ac:var(--violet)}
+.card.l{--ac:var(--lime)}
+.card.a{--ac:var(--amber)}
+
+/* ============================================================
+   ATLAS — abstract 3D environment strip
+============================================================ */
+#atlas .atlas-wrap{display:grid;grid-template-columns:1.05fr .95fr;gap:clamp(30px,5vw,80px);align-items:center}
+@media(max-width:960px){#atlas .atlas-wrap{grid-template-columns:1fr}}
+.orb-stage{
+  position:relative;aspect-ratio:1;max-width:520px;margin-inline:auto;width:100%;
+  display:grid;place-items:center;
+}
+.orb-core{
+  width:34%;aspect-ratio:1;border-radius:50%;
+  background:radial-gradient(circle at 34% 30%,rgba(0,240,255,.95),rgba(123,47,255,.75) 46%,rgba(20,0,50,.9) 78%);
+  box-shadow:0 0 60px rgba(0,240,255,.55),0 0 160px rgba(123,47,255,.4),inset -14px -18px 42px rgba(0,0,30,.7);
+  animation:orbPulse 4.5s ease-in-out infinite;
+}
+@keyframes orbPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+.orb-ring{
+  position:absolute;border-radius:50%;border:1px solid;
+  animation:ringSpin var(--rt,16s) linear infinite;
+}
+.orb-ring.r1{width:60%;height:60%;border-color:rgba(0,240,255,.5);transform-style:preserve-3d;--rt:12s;box-shadow:0 0 20px rgba(0,240,255,.2)}
+.orb-ring.r2{width:80%;height:80%;border-color:rgba(255,0,229,.35);--rt:20s;animation-direction:reverse}
+.orb-ring.r3{width:98%;height:98%;border-color:rgba(123,47,255,.3);--rt:30s;border-style:dashed}
+@keyframes ringSpin{from{transform:rotateX(66deg) rotateZ(0)}to{transform:rotateX(66deg) rotateZ(360deg)}}
+.orb-sat{
+  position:absolute;width:10px;height:10px;border-radius:50%;
+  background:#fff;box-shadow:0 0 14px var(--cyan),0 0 30px var(--cyan);
+  animation:satOrbit 7s linear infinite;
+}
+@keyframes satOrbit{
+  from{transform:rotate(0) translateX(160px) rotate(0)}
+  to{transform:rotate(360deg) translateX(160px) rotate(-360deg)}
+}
+.atlas-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:40px}
+.stat{
+  padding:20px 22px;border-radius:12px;background:rgba(8,16,38,.42);
+  border:1px solid rgba(140,200,255,.12);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+}
+.stat b{display:block;font-family:var(--font-display);font-size:clamp(22px,3vw,32px);letter-spacing:.06em;background:linear-gradient(90deg,var(--cyan),var(--magenta));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.stat span{font-family:var(--font-mono);font-size:10px;letter-spacing:.3em;color:var(--ink-dim);text-transform:uppercase}
+
+/* ============================================================
+   TRANSMISSION — terminal panel
+============================================================ */
+.terminal{
+  margin-top:52px;border-radius:14px;overflow:hidden;
+  border:1px solid rgba(0,240,255,.22);
+  background:rgba(3,8,20,.72);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  box-shadow:0 30px 80px rgba(0,0,10,.6),0 0 40px rgba(0,240,255,.08);
+  max-width:760px;
+}
+.term-bar{
+  display:flex;align-items:center;gap:8px;padding:12px 18px;
+  background:rgba(0,240,255,.06);border-bottom:1px solid rgba(0,240,255,.15);
+}
+.term-bar i{width:10px;height:10px;border-radius:50%}
+.term-bar i:nth-child(1){background:#ff5566;box-shadow:0 0 8px #ff5566}
+.term-bar i:nth-child(2){background:var(--amber);box-shadow:0 0 8px var(--amber)}
+.term-bar i:nth-child(3){background:var(--lime);box-shadow:0 0 8px var(--lime)}
+.term-bar span{margin-left:auto;font-family:var(--font-mono);font-size:10px;letter-spacing:.3em;color:var(--ink-dim)}
+.term-body{padding:24px 26px 30px;font-family:var(--font-mono);font-size:13px;line-height:2;color:rgba(160,255,230,.85);min-height:220px}
+.term-body .p{color:var(--cyan)}
+.term-body .ok{color:var(--lime)}
+.term-body .warn{color:var(--amber)}
+.term-body .caret{display:inline-block;width:8px;height:15px;background:var(--cyan);vertical-align:-2px;box-shadow:0 0 8px var(--cyan);animation:blink 1s steps(2) infinite}
+
+/* ============================================================
+   GATEWAY — final CTA
+============================================================ */
+#gateway{text-align:center;align-items:center;min-height:92vh}
+.gate-frame{
+  position:relative;padding:clamp(48px,7vw,90px) clamp(30px,7vw,110px);
+  border:1px solid rgba(0,240,255,.2);border-radius:24px;
+  background:linear-gradient(160deg,rgba(0,240,255,.05),rgba(123,47,255,.08),rgba(255,0,229,.05));
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  box-shadow:0 40px 120px rgba(0,0,12,.7),inset 0 0 80px rgba(0,240,255,.05);
+  overflow:hidden;
+}
+.gate-frame::before,.gate-frame::after{
+  content:"";position:absolute;width:180%;height:1px;left:-40%;
+  background:linear-gradient(90deg,transparent,rgba(0,240,255,.7),transparent);
+  animation:gateScan 5s ease-in-out infinite alternate;
+}
+.gate-frame::before{top:16%}
+.gate-frame::after{bottom:16%;animation-delay:-2.5s}
+@keyframes gateScan{from{transform:translateX(-8%)}to{transform:translateX(8%)}}
+.gate-frame h2{font-family:var(--font-display);font-weight:900;font-size:clamp(30px,5.6vw,64px);letter-spacing:.06em;text-transform:uppercase;line-height:1.08;margin-bottom:20px}
+.gate-frame h2 span{background:linear-gradient(90deg,var(--cyan),var(--magenta));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.gate-frame p{color:var(--ink-dim);max-width:480px;margin:0 auto 40px;line-height:1.75;letter-spacing:.05em}
+
+footer{
+  position:relative;z-index:10;padding:34px clamp(24px,6vw,80px);
+  display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;
+  border-top:1px solid rgba(0,240,255,.12);
+  background:rgba(3,5,14,.7);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.3em;color:var(--ink-dim);text-transform:uppercase;
+}
+footer .sig{color:var(--cyan)}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001s!important;transition-duration:.15s!important}
+  .reveal{opacity:1;transform:none;filter:none}
+}
+</style>
+</head>
+<body>
+
+<!-- cosmic backdrop -->
+<canvas id="gl"></canvas>
+<div class="nebula"></div>
+<div class="sweep"></div>
+<div class="vignette"></div>
+<div class="scanlines"></div>
+<div class="grain"></div>
+
+<!-- custom cursor -->
+<div class="cursor-ring" id="curRing"></div>
+<div class="cursor-dot" id="curDot"></div>
+
+<!-- boot intro -->
+<div id="boot" role="status" aria-label="loading">
+  <div class="boot-glyph"></div>
+  <div class="boot-text" id="bootText">INITIALIZING</div>
+  <div class="boot-bar"><i id="bootFill"></i></div>
+  <div class="boot-log" id="bootLog">&nbsp;</div>
+</div>
+
+<!-- HUD corners -->
+<div class="hud-corner tl"><svg viewBox="0 0 52 52"><path d="M1 18 V1 H18 M1 8 H6 M8 1 V6"/></svg></div>
+<div class="hud-corner tr"><svg viewBox="0 0 52 52"><path d="M1 18 V1 H18 M1 8 H6 M8 1 V6"/></svg></div>
+<div class="hud-corner bl"><svg viewBox="0 0 52 52"><path d="M1 18 V1 H18 M1 8 H6 M8 1 V6"/></svg></div>
+<div class="hud-corner br"><svg viewBox="0 0 52 52"><path d="M1 18 V1 H18 M1 8 H6 M8 1 V6"/></svg></div>
+
+<nav>
+  <a class="logo" href="#hero">
+    <span class="logo-mark"></span>
+    <span class="logo-name">NE<em>XUS</em></span>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#modules" data-idx="01">Modules</a></li>
+    <li><a href="#atlas" data-idx="02">Atlas</a></li>
+    <li><a href="#transmission" data-idx="03">Signal</a></li>
+    <li><a href="#gateway" data-idx="04">Gateway</a></li>
+  </ul>
+</nav>
+
+<main>
+  <!-- ================= HERO ================= -->
+  <section id="hero">
+    <div class="holo-chips" data-depth-layer>
+      <div class="chip c1" data-depth="30">CORE TEMP<b>−271.4°</b></div>
+      <div class="chip c2" data-depth="55">SIGNAL<b>98.6%</b></div>
+      <div class="chip c3" data-depth="40">DRIFT VECTOR<b>Δ 0.042</b></div>
+      <div class="chip c4" data-depth="65">ENTITIES<b>12,048</b></div>
+    </div>
+
+    <div class="hero-eyebrow reveal"><span class="dot"></span>SYSTEM ONLINE · V.5.0.2 · ORBITAL LINK STABLE</div>
+    <h1 class="hero-title reveal" style="--d:.1s">
+      <span class="line-a glitch" data-text="BEYOND THE">BEYOND THE</span>
+      <span class="line-b glitch" data-text="EVENT HORIZON">EVENT HORIZON</span>
+    </h1>
+    <p class="hero-desc reveal" style="--d:.22s">
+      A next-generation digital universe rendered in real time — holographic interfaces,
+      cinematic particle simulations and abstract environments that respond to your presence.
+      This is not a website. It is a place.
+    </p>
+    <div class="hero-cta reveal" style="--d:.34s">
+      <a class="btn primary magnetic" href="#modules">Enter Simulation <span class="arrow">→</span></a>
+      <a class="btn magenta magnetic" href="#transmission">Open Transmission <span class="arrow">⌁</span></a>
+    </div>
+
+    <div class="scroll-hint">
+      <span>Descend</span>
+      <div class="beam"></div>
+    </div>
+  </section>
+
+  <!-- data ticker -->
+  <div class="ticker" aria-hidden="true">
+    <div class="ticker-track" id="tickerTrack">
+      <span><i>◈</i>QUANTUM MESH SYNCED</span><span><i>◇</i>PARTICLE FIELD: 16K ACTIVE</span>
+      <span><i>◈</i>LATENCY 0.0031MS</span><span><i>△</i>DEEP-SPACE RELAY 7 LOCKED</span>
+      <span><i>◈</i>NEURAL LATTICE STABLE</span><span><i>◇</i>PHOTON BUFFER 100%</span>
+      <span><i>◈</i>GRAVITY WELL NOMINAL</span><span><i>△</i>SECTOR 9 UPLINK OPEN</span>
+    </div>
+  </div>
+
+  <!-- ================= MODULES ================= -->
+  <section id="modules">
+    <div class="sec-tag reveal">SYS.01 // MODULES<span class="blink">_</span></div>
+    <h2 class="sec-title reveal" style="--d:.08s">HOLOGRAPHIC <span class="grad">SUBSYSTEMS</span></h2>
+    <p class="sec-sub reveal" style="--d:.16s">
+      Six live subsystems drive the simulation. Hover to interface — each card is a floating
+      pane of light with true depth, tracking your motion in three axes.
+    </p>
+
+    <div class="grid">
+      <article class="card tilt reveal" style="--d:.05s">
+        <div class="inner">
+          <span class="card-num">SYS·001</span>
+          <div class="card-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9" stroke-dasharray="4 3"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2"/></svg></div>
+          <h3>Particle Reactor</h3>
+          <p>Sixteen thousand luminous particles simulated per frame in raw WebGL — drifting on curl fields, breathing with the cursor, folding into nebular currents.</p>
+          <a class="card-link" href="#atlas">Inspect core</a>
+        </div>
+      </article>
+
+      <article class="card m tilt reveal" style="--d:.12s">
+        <div class="inner">
+          <span class="card-num">SYS·002</span>
+          <div class="card-icon"><svg viewBox="0 0 24 24"><path d="M4 17l6-10 4 6 2-3 4 7z"/><path d="M2 21h20" stroke-dasharray="3 3"/></svg></div>
+          <h3>Terrain Synthesizer</h3>
+          <p>Abstract geometry grown from signed noise — impossible landscapes that exist only between refresh cycles, rendered as wireframes of pure light.</p>
+          <a class="card-link" href="#atlas">View atlas</a>
+        </div>
+      </article>
+
+      <article class="card v tilt reveal" style="--d:.19s">
+        <div class="inner">
+          <span class="card-num">SYS·003</span>
+          <div class="card-icon"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="12" rx="2"/><path d="M8 21h8M12 17v4M7 9h6M7 12h9"/></svg></div>
+          <h3>Glass Interface</h3>
+          <p>Every surface is frosted photonic glass — blurred, layered and lit from within. Interfaces float above the void at independent depths.</p>
+          <a class="card-link" href="#gateway">Touch surface</a>
+        </div>
+      </article>
+
+      <article class="card l tilt reveal" style="--d:.26s">
+        <div class="inner">
+          <span class="card-num">SYS·004</span>
+          <div class="card-icon"><svg viewBox="0 0 24 24"><path d="M12 2v6M12 16v6M2 12h6M16 12h6"/><circle cx="12" cy="12" r="3.5"/></svg></div>
+          <h3>Motion Engine</h3>
+          <p>Camera-like easing on every transition. Sections don't scroll — they dolly, rack focus and dissolve like shots in a film you're standing inside.</p>
+          <a class="card-link" href="#transmission">Trace motion</a>
+        </div>
+      </article>
+
+      <article class="card a tilt reveal" style="--d:.33s">
+        <div class="inner">
+          <span class="card-num">SYS·005</span>
+          <div class="card-icon"><svg viewBox="0 0 24 24"><path d="M3 12c3-6 6-6 9 0s6 6 9 0"/><path d="M3 18c3-6 6-6 9 0s6 6 9 0" opacity=".4"/></svg></div>
+          <h3>Signal Array</h3>
+          <p>Live telemetry streams across the hull — tickers, telemetry chips and status glyphs pulsing with data from twelve thousand tracked entities.</p>
+          <a class="card-link" href="#transmission">Open channel</a>
+        </div>
+      </article>
+
+      <article class="card tilt reveal" style="--d:.4s">
+        <div class="inner">
+          <span class="card-num">SYS·006</span>
+          <div class="card-icon"><svg viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg></div>
+          <h3>Depth Compositor</h3>
+          <p>Seven parallax strata between your eye and the void. Nebulae, particles, glass and glyphs each move on their own plane as you travel.</p>
+          <a class="card-link" href="#gateway">Enter gateway</a>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ================= ATLAS ================= -->
+  <section id="atlas">
+    <div class="atlas-wrap">
+      <div class="orb-stage reveal" data-depth-layer>
+        <div class="orb-ring r3"></div>
+        <div class="orb-ring r2"></div>
+        <div class="orb-ring r1"></div>
+        <div class="orb-core" data-depth="25"></div>
+        <div class="orb-sat"></div>
+      </div>
+      <div>
+        <div class="sec-tag reveal">SYS.02 // ATLAS<span class="blink">_</span></div>
+        <h2 class="sec-title reveal" style="--d:.08s">AN ABSTRACT<br><span class="grad">3D ENVIRONMENT</span></h2>
+        <p class="sec-sub reveal" style="--d:.16s">
+          At the centre of the simulation burns a plasma core suspended in three gyroscopic
+          light-rings. The starfield behind you is a true 3D volume — tilt your cursor and the
+          whole universe leans with you, layer by layer, like a camera on a crane.
+        </p>
+        <div class="atlas-stats reveal" style="--d:.24s">
+          <div class="stat"><b id="statParticles">0</b><span>Particles / frame</span></div>
+          <div class="stat"><b id="statFps">0</b><span>Render FPS</span></div>
+          <div class="stat"><b>7</b><span>Depth strata</span></div>
+          <div class="stat"><b>∞</b><span>Draw distance</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= TRANSMISSION ================= -->
+  <section id="transmission">
+    <div class="sec-tag reveal">SYS.03 // SIGNAL<span class="blink">_</span></div>
+    <h2 class="sec-title reveal" style="--d:.08s">INCOMING <span class="grad">TRANSMISSION</span></h2>
+    <p class="sec-sub reveal" style="--d:.16s">
+      A live feed from the deep relay. The console below decrypts in real time as you watch.
+    </p>
+    <div class="terminal reveal" style="--d:.24s">
+      <div class="term-bar"><i></i><i></i><i></i><span>RELAY-7 · SECURE CHANNEL</span></div>
+      <div class="term-body" id="termBody"><span class="caret"></span></div>
+    </div>
+  </section>
+
+  <!-- ================= GATEWAY ================= -->
+  <section id="gateway">
+    <div class="gate-frame reveal">
+      <div class="sec-tag" style="justify-content:center">SYS.04 // GATEWAY<span class="blink">_</span></div>
+      <h2>STEP THROUGH<br><span>THE GATEWAY</span></h2>
+      <p>The simulation is open. Twelve thousand entities are already inside, drifting between the strata. Your coordinates have been reserved.</p>
+      <div class="hero-cta">
+        <a class="btn primary magnetic" href="#hero">Re-enter Orbit <span class="arrow">↺</span></a>
+        <a class="btn magenta magnetic" href="#modules">Browse Subsystems <span class="arrow">→</span></a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span class="sig">NEXUS // DIGITAL UNIVERSE</span>
+  <span>REL 5.0.2 · BUILT IN THE VOID</span>
+  <span>© 2077 ALL REALITIES RESERVED</span>
+</footer>
+
+<script>
+/* ============================================================
+   NEXUS runtime — particle engine, depth rig, UI systems.
+   Zero dependencies: raw WebGL + vanilla DOM.
+============================================================ */
+(function(){
+"use strict";
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------- shared pointer state (lerped for fluid motion) ---------- */
+const ptr = {x:.5,y:.5,sx:.5,sy:.5};
+addEventListener("pointermove",e=>{
+  ptr.x = e.clientX/innerWidth;
+  ptr.y = e.clientY/innerHeight;
+},{passive:true});
+
+/* ============================================================
+   1 · WebGL particle universe
+   Two populations in one buffer:
+     group 0 — ambient starfield volume drifting on sine-curl
+     group 1 — particles bound to a rotating torus-knot formation
+============================================================ */
+const canvas = document.getElementById("gl");
+const gl = canvas.getContext("webgl",{alpha:true,antialias:false,powerPreference:"high-performance"});
+let COUNT = 0, running = false;
+
+if(gl){
+  const isMobile = innerWidth < 760;
+  const N_FIELD = isMobile ? 5000 : 12000;
+  const N_KNOT  = isMobile ? 1800 : 4000;
+  COUNT = N_FIELD + N_KNOT;
+
+  const VERT = `
+  attribute vec4 aData;   // x,y,z, group
+  attribute vec4 aSeed;   // size, hue, phase, speed
+  uniform float uTime;
+  uniform vec2  uTilt;    // pointer parallax
+  uniform float uScroll;  // camera travel
+  uniform vec2  uRes;
+  uniform float uDpr;
+  varying float vHue;
+  varying float vAlpha;
+
+  void main(){
+    vec3 p = aData.xyz;
+    float grp = aData.w;
+    float t = uTime * aSeed.w;
+
+    if(grp < .5){
+      // ambient field: slow pseudo-curl drift
+      p.x += sin(t*.30 + p.y*1.7 + aSeed.z*6.283) * .55;
+      p.y += cos(t*.26 + p.z*1.9 + aSeed.z*4.71)  * .55;
+      p.z += sin(t*.22 + p.x*1.3 + aSeed.z*3.14)  * .55;
+      // endless forward travel with scroll: wrap in depth
+      p.z = mod(p.z + uScroll*6.0 + 40.0, 80.0) - 40.0;
+    } else {
+      // torus-knot formation, rotating like a slow machine
+      float a = aSeed.z*6.28318 + uTime*.12;
+      float R = 11.0, r = 3.4;
+      float p_ = 2.0, q_ = 3.0;
+      vec3 k;
+      k.x = (R + r*cos(q_*a)) * cos(p_*a);
+      k.y = (R + r*cos(q_*a)) * sin(p_*a);
+      k.z =  r * sin(q_*a) * 1.6;
+      // breathe + jitter shell around the curve
+      k += (p * (1.1 + .25*sin(uTime*.8 + aSeed.z*12.0)));
+      // rotate whole structure
+      float ry = uTime*.1;
+      k = vec3(k.x*cos(ry)-k.z*sin(ry), k.y, k.x*sin(ry)+k.z*cos(ry));
+      float rx = .45 + sin(uTime*.05)*.2;
+      k = vec3(k.x, k.y*cos(rx)-k.z*sin(rx), k.y*sin(rx)+k.z*cos(rx));
+      p = k * .9;
+      p.z -= 6.0;
+      p.z += uScroll * 2.0;
+    }
+
+    // camera: pointer tilt as gentle rotation
+    float cy = uTilt.x * .35;
+    p = vec3(p.x*cos(cy)-p.z*sin(cy), p.y, p.x*sin(cy)+p.z*cos(cy));
+    float cx = uTilt.y * .25;
+    p = vec3(p.x, p.y*cos(cx)-p.z*sin(cx), p.y*sin(cx)+p.z*cos(cx));
+
+    float depth = p.z + 42.0;               // push scene in front of camera
+    if(depth < .1) depth = .1;
+    float persp = 26.0 / depth;
+
+    vec2 clip = p.xy * persp;
+    clip.x *= uRes.y / uRes.x;               // aspect correction
+    gl_Position = vec4(clip * .06 * 16.0 / 16.0, 0.0, 1.0);
+    gl_Position.xy *= .9;
+
+    float tw = .55 + .45*sin(uTime*2.2 + aSeed.z*40.0);
+    vAlpha = clamp(persp*1.15, .05, 1.0) * tw;
+    vHue = aSeed.y + grp*.18;
+    gl_PointSize = aSeed.x * persp * uDpr * (grp>.5 ? 1.35 : 1.0);
+  }`;
+
+  const FRAG = `
+  precision mediump float;
+  varying float vHue;
+  varying float vAlpha;
+
+  vec3 palette(float h){
+    // cyan -> violet -> magenta neon ramp
+    vec3 a = vec3(0.02,0.90,1.00);
+    vec3 b = vec3(0.48,0.18,1.00);
+    vec3 c = vec3(1.00,0.05,0.90);
+    h = fract(h);
+    if(h < .5) return mix(a,b,h*2.0);
+    return mix(b,c,(h-.5)*2.0);
+  }
+  void main(){
+    vec2 uv = gl_PointCoord - .5;
+    float d = length(uv);
+    float glow = exp(-d*d*14.0) - exp(-.25*14.0);
+    if(glow <= 0.0) discard;
+    vec3 col = palette(vHue) * glow;
+    col += vec3(1.0) * exp(-d*d*60.0) * .6;   // hot white core
+    gl_FragColor = vec4(col, glow * vAlpha);
+  }`;
+
+  function shader(type,src){
+    const s = gl.createShader(type);
+    gl.shaderSource(s,src); gl.compileShader(s);
+    if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(s);
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog,shader(gl.VERTEX_SHADER,VERT));
+  gl.attachShader(prog,shader(gl.FRAGMENT_SHADER,FRAG));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+
+  // interleave: aData(x,y,z,group) + aSeed(size,hue,phase,speed)
+  const data = new Float32Array(COUNT*8);
+  for(let i=0;i<COUNT;i++){
+    const o = i*8, knot = i >= N_FIELD;
+    if(!knot){
+      data[o  ] = (Math.random()*2-1)*34;
+      data[o+1] = (Math.random()*2-1)*22;
+      data[o+2] = (Math.random()*2-1)*40;
+      data[o+3] = 0;
+      data[o+4] = 1.2 + Math.random()*2.6;          // size
+    }else{
+      // local jitter offset around the knot curve
+      data[o  ] = (Math.random()*2-1);
+      data[o+1] = (Math.random()*2-1);
+      data[o+2] = (Math.random()*2-1);
+      data[o+3] = 1;
+      data[o+4] = 1.6 + Math.random()*3.0;
+    }
+    data[o+5] = Math.random();                       // hue
+    data[o+6] = Math.random();                       // phase
+    data[o+7] = .4 + Math.random()*.9;               // speed
+  }
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+  gl.bufferData(gl.ARRAY_BUFFER,data,gl.STATIC_DRAW);
+  const locData = gl.getAttribLocation(prog,"aData");
+  const locSeed = gl.getAttribLocation(prog,"aSeed");
+  gl.enableVertexAttribArray(locData);
+  gl.enableVertexAttribArray(locSeed);
+  gl.vertexAttribPointer(locData,4,gl.FLOAT,false,32,0);
+  gl.vertexAttribPointer(locSeed,4,gl.FLOAT,false,32,16);
+
+  const uTime   = gl.getUniformLocation(prog,"uTime");
+  const uTilt   = gl.getUniformLocation(prog,"uTilt");
+  const uScroll = gl.getUniformLocation(prog,"uScroll");
+  const uRes    = gl.getUniformLocation(prog,"uRes");
+  const uDpr    = gl.getUniformLocation(prog,"uDpr");
+
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE);   // additive glow
+  gl.disable(gl.DEPTH_TEST);
+
+  const dpr = Math.min(devicePixelRatio||1, 2);
+  function resize(){
+    canvas.width  = innerWidth  * dpr;
+    canvas.height = innerHeight * dpr;
+    gl.viewport(0,0,canvas.width,canvas.height);
+    gl.uniform2f(uRes,canvas.width,canvas.height);
+    gl.uniform1f(uDpr,dpr);
+  }
+  addEventListener("resize",resize,{passive:true});
+  resize();
+
+  /* fps meter + render loop */
+  let frames=0, lastFps=performance.now(), fpsVal=60;
+  let scrollSmooth = 0;
+  const t0 = performance.now();
+
+  function frame(now){
+    requestAnimationFrame(frame);
+    if(document.hidden) return;
+    const t = (now - t0)/1000;
+
+    ptr.sx += (ptr.x - ptr.sx)*.045;
+    ptr.sy += (ptr.y - ptr.sy)*.045;
+    const scrollT = scrollY / Math.max(1, document.body.scrollHeight - innerHeight);
+    scrollSmooth += (scrollT - scrollSmooth)*.06;
+
+    gl.clearColor(0,0,0,0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.uniform1f(uTime, reduceMotion ? 0 : t);
+    gl.uniform2f(uTilt,(ptr.sx-.5)*2,(ptr.sy-.5)*2);
+    gl.uniform1f(uScroll, scrollSmooth);
+    gl.drawArrays(gl.POINTS,0,COUNT);
+
+    frames++;
+    if(now - lastFps > 800){
+      fpsVal = Math.round(frames*1000/(now-lastFps));
+      frames = 0; lastFps = now;
+      const el = document.getElementById("statFps");
+      if(el) el.textContent = Math.min(fpsVal, 120);
+    }
+  }
+  requestAnimationFrame(frame);
+  running = true;
+}else{
+  canvas.remove(); // graceful: nebula + CSS layers still carry the scene
+}
+
+/* animated particle counter stat */
+(function(){
+  const el = document.getElementById("statParticles");
+  const target = COUNT || 16000;
+  let cur = 0;
+  function step(){
+    cur += Math.max(1,(target-cur)*.06);
+    if(cur >= target-1){ el.textContent = target.toLocaleString(); return; }
+    el.textContent = Math.floor(cur).toLocaleString();
+    requestAnimationFrame(step);
+  }
+  const io = new IntersectionObserver(es=>{
+    if(es[0].isIntersecting){ step(); io.disconnect(); }
+  },{threshold:.4});
+  io.observe(el);
+})();
+
+/* ============================================================
+   2 · Boot sequence
+============================================================ */
+(function(){
+  const boot = document.getElementById("boot");
+  const fill = document.getElementById("bootFill");
+  const text = document.getElementById("bootText");
+  const logEl = document.getElementById("bootLog");
+  const logs = [
+    "mounting photon buffers",
+    "calibrating gravity well",
+    "seeding particle reactor",
+    "linking deep-space relay 7",
+    "decrypting star charts",
+    "stabilizing event horizon"
+  ];
+  if(reduceMotion){ boot.classList.add("done"); return; }
+  let p = 0, li = 0;
+  const iv = setInterval(()=>{
+    p = Math.min(100, p + 6 + Math.random()*14);
+    fill.style.width = p + "%";
+    logEl.textContent = "> " + logs[li++ % logs.length];
+    if(p >= 100){
+      clearInterval(iv);
+      text.textContent = "WELCOME, TRAVELLER";
+      setTimeout(()=>boot.classList.add("done"), 420);
+    }
+  }, 210);
+  // hard fallback so the overlay can never trap the page
+  setTimeout(()=>boot.classList.add("done"), 5000);
+})();
+
+/* ============================================================
+   3 · Custom cursor
+============================================================ */
+(function(){
+  const dot = document.getElementById("curDot");
+  const ring = document.getElementById("curRing");
+  if(matchMedia("(hover: none)").matches) return;
+  let rx = innerWidth/2, ry = innerHeight/2, tx = rx, ty = ry;
+  addEventListener("pointermove",e=>{
+    tx = e.clientX; ty = e.clientY;
+    dot.style.transform = `translate(${tx}px,${ty}px) translate(-50%,-50%)`;
+  },{passive:true});
+  (function loop(){
+    rx += (tx-rx)*.16; ry += (ty-ry)*.16;
+    ring.style.transform = `translate(${rx}px,${ry}px) translate(-50%,-50%)`;
+    requestAnimationFrame(loop);
+  })();
+  document.querySelectorAll("a,button,.card").forEach(el=>{
+    el.addEventListener("pointerenter",()=>ring.classList.add("on-link"));
+    el.addEventListener("pointerleave",()=>ring.classList.remove("on-link"));
+  });
+})();
+
+/* ============================================================
+   4 · Scroll reveal — cinematic dolly-in
+============================================================ */
+(function(){
+  const els = document.querySelectorAll(".reveal");
+  const io = new IntersectionObserver(entries=>{
+    entries.forEach(en=>{ if(en.isIntersecting){ en.target.classList.add("in"); io.unobserve(en.target); } });
+  },{threshold:.18,rootMargin:"0px 0px -6% 0px"});
+  els.forEach(el=>io.observe(el));
+})();
+
+/* ============================================================
+   5 · 3D tilt cards with cursor-tracked holo glow
+============================================================ */
+(function(){
+  if(reduceMotion) return;
+  document.querySelectorAll(".tilt").forEach(card=>{
+    let raf = null;
+    card.addEventListener("pointermove",e=>{
+      if(raf) return;
+      raf = requestAnimationFrame(()=>{
+        raf = null;
+        const r = card.getBoundingClientRect();
+        const px = (e.clientX - r.left)/r.width;
+        const py = (e.clientY - r.top)/r.height;
+        card.style.setProperty("--mx",(px*100)+"%");
+        card.style.setProperty("--my",(py*100)+"%");
+        card.style.transform =
+          `perspective(900px) rotateX(${(py-.5)*-11}deg) rotateY(${(px-.5)*13}deg) translateZ(6px)`;
+      });
+    });
+    card.addEventListener("pointerleave",()=>{
+      card.style.transition = "transform .7s cubic-bezier(.16,1,.3,1), border-color .4s, box-shadow .4s";
+      card.style.transform = "perspective(900px) rotateX(0) rotateY(0) translateZ(0)";
+      setTimeout(()=>card.style.transition="",700);
+    });
+  });
+})();
+
+/* ============================================================
+   6 · Depth parallax layers (chips, orb) follow pointer
+============================================================ */
+(function(){
+  if(reduceMotion) return;
+  const items = document.querySelectorAll("[data-depth]");
+  (function loop(){
+    const dx = (ptr.sx-.5), dy = (ptr.sy-.5);
+    items.forEach(el=>{
+      const d = parseFloat(el.dataset.depth)||20;
+      el.style.translate = `${-dx*d}px ${-dy*d}px`;
+    });
+    requestAnimationFrame(loop);
+  })();
+})();
+
+/* ============================================================
+   7 · Magnetic buttons
+============================================================ */
+(function(){
+  if(reduceMotion || matchMedia("(hover: none)").matches) return;
+  document.querySelectorAll(".magnetic").forEach(btn=>{
+    btn.addEventListener("pointermove",e=>{
+      const r = btn.getBoundingClientRect();
+      const x = e.clientX - r.left - r.width/2;
+      const y = e.clientY - r.top - r.height/2;
+      btn.style.transform = `translate(${x*.22}px,${y*.3}px)`;
+    });
+    btn.addEventListener("pointerleave",()=>{ btn.style.transform = ""; });
+  });
+})();
+
+/* ============================================================
+   8 · Terminal transmission — typed decrypt feed
+============================================================ */
+(function(){
+  const body = document.getElementById("termBody");
+  const caret = body.querySelector(".caret");
+  const lines = [
+    ['p',"nexus@relay-7:~$ decrypt --stream horizon.sig"],
+    ['',  "handshake .......... ", 'ok',"ESTABLISHED"],
+    ['',  "cipher lattice ..... ", 'ok',"UNFOLDED"],
+    ['',  "origin ............. ", 'warn',"UNKNOWN / NON-LOCAL"],
+    ['',  ""],
+    ['',  "» They built the interface out of light,"],
+    ['',  "» so that anyone who touched it"],
+    ['',  "» would remember the stars."],
+    ['',  ""],
+    ['p',"nexus@relay-7:~$ status --all"],
+    ['ok',"ALL SYSTEMS NOMINAL — the universe is listening."]
+  ];
+  let started = false;
+  function typeLines(){
+    if(started) return; started = true;
+    let li = 0;
+    function nextLine(){
+      if(li >= lines.length) return;
+      const parts = lines[li++]; // [class, text, class, text...]
+      const row = document.createElement("div");
+      body.insertBefore(row, caret);
+      let pi = 0, ci = 0;
+      function tick(){
+        const cls = parts[pi], txt = parts[pi+1];
+        if(txt === undefined){ setTimeout(nextLine, 160); return; }
+        if(ci === 0 && cls){ row.insertAdjacentHTML("beforeend",`<span class="${cls}"></span>`); }
+        const target = cls ? row.lastElementChild : row;
+        if(ci < txt.length){
+          target.append(txt[ci++]);
+          setTimeout(tick, reduceMotion ? 0 : 14 + Math.random()*22);
+        }else{ pi += 2; ci = 0; tick(); }
+      }
+      tick();
+    }
+    nextLine();
+  }
+  const io = new IntersectionObserver(es=>{
+    if(es[0].isIntersecting){ typeLines(); io.disconnect(); }
+  },{threshold:.35});
+  io.observe(body);
+})();
+
+/* ============================================================
+   9 · Ticker — duplicate track for seamless loop
+============================================================ */
+(function(){
+  const track = document.getElementById("tickerTrack");
+  track.innerHTML += track.innerHTML;
+})();
+
+})();
+</script>
+</body>
+</html>
