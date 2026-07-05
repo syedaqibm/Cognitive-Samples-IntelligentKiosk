@@ -4,8 +4,8 @@ final class EditorTextView: NSTextView {
     var currentLineColor: NSColor?
     var highlightCurrentLine = true
 
-    override func drawBackground(in rect: NSRect) {
-        super.drawBackground(in: rect)
+    override func drawViewBackground(in rect: NSRect) {
+        super.drawViewBackground(in: rect)
         guard highlightCurrentLine,
               let color = currentLineColor,
               let layoutManager,
