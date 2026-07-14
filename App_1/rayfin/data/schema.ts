@@ -1,7 +1,9 @@
-import { Todo } from './Todo.js';
+import { Expense } from './Expense.js';
+import { Budget } from './Budget.js';
 
-export type TodoAppSchema = {
-  Todo: Todo;
+export type ExpenseAppSchema = {
+  Expense: Expense;
+  Budget: Budget;
 };
 
-export const schema = [Todo];
+export const schema = [Expense, Budget];
